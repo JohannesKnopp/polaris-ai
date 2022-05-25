@@ -1,0 +1,2 @@
+,experiment,neurons,batch_size,epochs,rmse
+0,exp_01,50,72,100,0.01619961756998795

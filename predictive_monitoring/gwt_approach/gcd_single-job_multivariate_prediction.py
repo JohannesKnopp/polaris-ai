@@ -16,6 +16,7 @@ from keras.layers import RNN
 from keras.layers import Dense
 from tfRIM import RIMCell
 from sklearn.metrics import mean_squared_error
+from matplotlib import pyplot
 
 
 def generate_model(train_x, batch_size, neurons):  # TODO maybe add RIM / GWT hyperparameters ?
@@ -54,6 +55,32 @@ def predict_model(test_x, test_y, model):
 
     return inv_y, inv_yhat
 
+
+def plot_val_history(history, output_path, name):
+    # plot history
+    pyplot.clf()
+    pyplot.plot(history['loss'], label='train')
+    pyplot.plot(history['val_loss'], label='test')
+    pyplot.legend()
+    pyplot.ylim((0.00, 0.27))
+    pyplot.savefig(os.path.join(output_path, 'gcd_%s_val-loss.png' % name))
+
+
+def plot_prediction(y, yhat, name):
+    # line plot of observed vs predicted
+    pyplot.clf()
+    pyplot.plot(y[-100:], '-', color='orange', label="Raw measurements")
+    pyplot.plot(yhat[-100:], '--', color='blue', label="Predictions")
+    pyplot.xlabel('Steps', fontsize=20)
+    pyplot.ylabel('Efficiency', fontsize=20)
+    pyplot.xticks(fontsize=24)
+    pyplot.yticks(fontsize=24)
+    pyplot.legend(fontsize=14, frameon=False)
+    pyplot.tight_layout()
+    prediction_out_figure = os.path.join(figures_path, 'gcd_%s_pred.png' % name)
+    pyplot.savefig(prediction_out_figure)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GWT-RIM predictor for job efficiency')  # TODO
     parser.add_argument('hyperparameters', metavar='H', type=int, nargs=3,
@@ -75,7 +102,9 @@ if __name__ == '__main__':
     JOB_ID = args.job_id
 
     input_path = '../data/task-usage_job-ID-%i_total.csv' % JOB_ID
-    results_path = '../results'
+    figures_path = '../experiments_result/figures_GWT'
+    results_path = 'results'
+    model_path = '../models'
 
     columns_to_consider = columns_selection["GWT_efficiency_1"]  # TODO add argparse
 
@@ -103,5 +132,9 @@ if __name__ == '__main__':
     results['rmse'].append(rmse)
 
     res = pd.DataFrame(results)
-    res.to_csv(os.path.join(results_path))
-    model.save('models/rim_model_%s' % exp_name)
+    res.to_csv(os.path.join(results_path, '%s.csv' % exp_name))
+
+    plot_val_history(history_loss, figures_path, exp_name)
+    plot_prediction(inv_y, inv_yhat, exp_name)
+
+    model.save(os.path.join(model_path, 'rim_model_%s' % exp_name))
