@@ -12,6 +12,7 @@ from gcd_data_manipulation import load_data
 from gcd_data_manipulation import data_aggregation
 from gcd_data_manipulation import extract_train_test
 from keras.models import Sequential
+# from keras.layers import Input
 from keras.layers import RNN
 from keras.layers import Dense
 from tfRIM import RIMCell
@@ -28,6 +29,7 @@ def generate_model(train_x, batch_size, neurons):  # TODO maybe add RIM / GWT hy
                        num_comm_heads=4, comm_key_size=32, comm_value_size=32, comm_query_size=32, comm_keep_prob=1)
 
     model = Sequential()
+    # model.add(Input([train_x.shape]))
     model.add(RNN(cell=rim_cell, batch_input_shape=(batch_size, train_x.shape[1], train_x.shape[2])))
     model.add(Dense(1))
     model.compile(loss='mae', optimizer='adam')  # TODO evaluation loss
