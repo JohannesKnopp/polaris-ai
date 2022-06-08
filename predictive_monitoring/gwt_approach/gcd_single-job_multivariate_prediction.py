@@ -137,4 +137,4 @@ if __name__ == '__main__':
     plot_val_history(history_loss, figures_path, exp_name)
     plot_prediction(inv_y, inv_yhat, exp_name)
 
-    model.save(os.path.join(model_path, 'rim_model_%s' % exp_name))
+    model.save(os.path.join(model_path, 'rim_model_%s' % exp_name), save_format='h5')

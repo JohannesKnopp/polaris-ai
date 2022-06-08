@@ -4,6 +4,7 @@ Tensorflow implementation of Recurrent Independent Mechanisms from https://githu
 import tensorflow as tf
 import numpy as np
 
+
 class GroupLinearLayer(tf.keras.layers.Layer):
     
     def __init__(self, units, nRIM):
@@ -21,6 +22,19 @@ class GroupLinearLayer(tf.keras.layers.Layer):
         params = self.w
         out = tf.transpose(tf.matmul(tf.transpose(inputs, [1,0,2]), params),[1,0,2])
         return out
+
+    def get_config(self):
+        config = super(GroupLinearLayer, self).get_config()
+        config.update({
+            'units': self.units,
+            'nRIM': self.nRIM
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
 
 class GroupGRUCell(tf.keras.layers.Layer):
     
@@ -60,7 +74,20 @@ class GroupGRUCell(tf.keras.layers.Layer):
         h_t = tf.multiply(h, input_gate) + tf.multiply(new_cell, 1-input_gate)
         
         return h_t, (h_t)
-        
+
+    def get_config(self):
+        config = super(GroupGRUCell, self).get_config()
+        config.update({
+            'units': self.units,
+            'nRIM': self.nRIM
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
 class GroupLSTMCell(tf.keras.layers.Layer):
     
     def __init__(self, units, nRIM):
@@ -99,12 +126,24 @@ class GroupLSTMCell(tf.keras.layers.Layer):
         h_t = tf.multiply(output_gate, tf.tanh(c_t))
         return h_t, (h_t, c_t)
 
+    def get_config(self):
+        config = super(GroupLSTMCell, self).get_config()
+        config.update({
+            'units': self.units,
+            'nRIM': self.nRIM
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
 
 class RIMCell(tf.keras.layers.Layer):
     
     def __init__(self, units, nRIM, k,
                 num_input_heads, input_key_size, input_value_size, input_query_size, input_keep_prob,
-                num_comm_heads, comm_key_size, comm_value_size, comm_query_size, comm_keep_prob):
+                num_comm_heads, comm_key_size, comm_value_size, comm_query_size, comm_keep_prob, **kwargs):
         super(RIMCell, self).__init__()
         self.units = units
         self.nRIM = nRIM
@@ -222,3 +261,26 @@ class RIMCell(tf.keras.layers.Layer):
         
         comm_out = self.comm_attention_output(context_layer1) + h_new
         return comm_out
+
+    def get_config(self):
+        config = super(RIMCell, self).get_config()
+        config.update( {
+            'units': self.units,
+            'nRIM': self.nRIM,
+            'k': self.k,
+            'num_input_heads': self.num_input_heads,
+            'input_key_size': self.input_key_size,
+            'input_value_size': self.input_value_size,
+            'input_query_size': self.input_query_size,
+            'input_keep_prob': self.input_keep_prob,
+            'num_comm_heads': self.num_comm_heads,
+            'comm_key_size': self.comm_key_size,
+            'comm_value_size': self.comm_value_size,
+            'comm_query_size': self.comm_query_size,
+            'comm_keep_prob': self.comm_keep_prob
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
