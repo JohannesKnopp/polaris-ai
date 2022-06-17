@@ -1,6 +1,9 @@
 from pandas import DataFrame
 from pandas import concat
 from pandas import read_csv
+import math
+
+from torch.utils.data import Dataset
 
 from sklearn.preprocessing import MinMaxScaler
 
@@ -92,3 +95,39 @@ def extract_train_test(values, n_train=(14 * 24 * 12)):
     test_X, test_y = extract_data_target(test)
 
     return train_X, train_y, test_X, test_y, scaler
+
+
+class ClusterDataset(Dataset):
+    """
+    PyTorch Custom Dataset to load the cluster data
+
+    Attributes
+    ----------
+    input_path : str
+        location of input file
+    columns_to_consider : list
+        fields relevant for the neural network
+    aggr_type : str
+        aggregation type for values (default = 'mean')
+    training : bool
+        indicates if the dataset is a training set or test set
+        True = Training Set, False = Test Set
+    split_percentage: float
+        between [0, 1], indicates the ratio of training / test split
+        the given percentage is the proportion the training set
+    """
+    # TODO add constraints for aggr_type / split_percentage
+    def __init__(self, input_path, columns_to_consider, aggr_type='mean', training=True, split_percentage=0.7):
+        readings_df = data_aggregation(load_data(input_path, columns_to_consider), aggr_type=aggr_type)
+        values = readings_df.astype('float32')
+        scaled, scaler = scale_values(values)
+        reframed = series_to_supervised(scaled, 1, 1)
+        reframed_final = extract_final_dataframe(reframed, [i for i in range(values.shape[1], (2 * values.shape[1]) - 1)])
+        split_idx = math.floor(reframed_final.values.shape[0] * split_percentage)
+        self.values = reframed_final.values[:split_idx, :] if training else reframed_final.values[split_idx:, :]
+
+    def __len__(self):
+        return self.values.shape[0]
+
+    def __getitem__(self, idx):
+        return self.values[idx, :-1], self.values[idx, -1]
