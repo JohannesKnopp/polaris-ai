@@ -2,12 +2,15 @@ import argparse
 import sys
 import json
 import time
+
+import einops
 import numpy as np
 from collections import defaultdict
 
 from gcd_data_manipulation import ClusterDataset
 
 import torch
+import torchvision
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from transformers import TransformerEncoder
@@ -17,13 +20,12 @@ from transformers import TransformerEncoder
 
 
 class SharedWorkspaceModel(nn.Module):
-    def __init__(self, input_shape, output_shape):
+    def __init__(self, h_dim, output_shape):
         super().__init__()
-        self.train_x = train_x
         self.transformer = TransformerEncoder(
             # embed_dim=args.embed_dim, TODO
-            embed_dim=input_shape,
-            ffn_dim=neurons,
+            embed_dim=h_dim,
+            ffn_dim=ffn_dim,
             num_layers=args.num_layers,
             num_heads=args.num_heads,
             dropout=args.dropout,
@@ -33,10 +35,29 @@ class SharedWorkspaceModel(nn.Module):
             topk=args.topk,
             mem_slots=args.mem_slots
         )
-        self.output = nn.Linear(neurons, output_shape)
+        self.h_dim = h_dim
+        self.cls_token = nn.Parameter(torch.randn(1, 1, h_dim))
+        self.output = nn.Linear(ffn_dim, output_shape)
 
-    def forward(self, features):
-        x = self.transformer(features)
+    def forward(self, inputs):
+        print(inputs.shape)
+        x = inputs.cuda()
+
+        # x = einops.repeat(x, 'b f -> b (a f) d', a=16, d=self.h_dim)
+        #
+        # b, _, _ = x.shape
+        #
+        # cls_tokens = einops.repeat(self.cls_token, '() n d -> b n d', b=b)
+        # x = torch.cat((cls_tokens, x), dim=1)
+        #
+        # # x = einops.rearrange(x, 'b f -> b f f')
+        # print(x.shape)
+        #
+        # x = self.transformer(x)
+        # # x = self.mlp_head(x[:,0])
+        #
+        # print('SURVIVED THE TRANSFORMER :OOO')
+
         x = self.output(x)
         return x
 
@@ -52,12 +73,7 @@ def str2bool(v):
     raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
-def train_model(epoch):
-    print('\nEpoch: %d', epoch)
-    start_time = time.time()
-    model.train()
-    train_loss = 0
-    for batch_idx, (inputs, targets) in enumerate(trainloader):
+
 
 
 
@@ -66,11 +82,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--job_id', default=3418339, type=int, help='ID of the job considered for the model generation')
     parser.add_argument('--epochs', default=100, type=int, help='num of epochs to train')
-    parser.add_argument('--neurons', type=int, default=512)  # neurons in one feed forward layer
+    parser.add_argument('--ffn_dim', type=int, default=512)  # neurons in one feed forward layer
     parser.add_argument('--batch_size', default=64, type=int, help='batch_size to use')
     parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
 
-    # parser.add_argument('--embed_dim', type=int, default=256) this is shape of the input data TODO doublecheck
+    parser.add_argument('--h_dim', type=int, default=64) # this is shape of the input data TODO doublecheck
     parser.add_argument('--num_layers', default=12, type=int, help='num of layers')
     parser.add_argument('--num_heads', default=4, type=int, help='num of heads in Multi Head attention layer')
     parser.add_argument('--dropout', default=0.1, type=float, help='dropout')
@@ -100,7 +116,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args(sys.argv[1:])
     epochs = args.epochs
-    neurons = args.neurons
+    ffn_dim = args.ffn_dim
     batch_size = args.batch_size
     exp_name = args.exp_name
     JOB_ID = args.job_id
@@ -113,25 +129,47 @@ if __name__ == '__main__':
 
     columns_to_consider = columns_selection['GWT_efficiency_1']  # TODO add argparse
 
-    cluster_data = ClusterDataset(input_path, columns_to_consider, aggr_type='mean') # TODO vary aggr_type
+    transform = torchvision.transforms.ToTensor()
 
-    train_loader = DataLoader(cluster_data, )
+    train_data = ClusterDataset(input_path, columns_to_consider, aggr_type='mean', training=True, split_percentage=0.7)
+    test_data = ClusterDataset(input_path, columns_to_consider, aggr_type='mean', training=False, split_percentage=0.7)
+
+    train_data.values.to(device)
+    test_data.values.to(device)
+
+    train_loader = DataLoader(train_data, batch_size=batch_size)
+    test_loader = DataLoader(test_data, batch_size=batch_size)
 
 
     results = defaultdict(list)
 
-    # >>> print(train_x.shape, train_y.shape)
-    # (4032, 1, 16) (4032,)
-
-    model = SharedWorkspaceModel(input_shape=train_x.shape[2], output_shape=train_x.shape[1])
+    model = SharedWorkspaceModel(h_dim=args.h_dim, output_shape=1)  # TODO
     model.to(device)
 
-    criterion = nn.L1Loss() # TODO try MSELoss()
+    criterion = nn.L1Loss()  # TODO try MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     # scheduler = torch.optim.lr_scheduler TODO add scheduler
 
     for epoch in range(1, epochs):
-        train_model(epoch)
+        print(f'\nEpoch: {epoch}')
+        start_time = time.time()
+        model.train()
+        train_loss = 0
+        for batch_idx, (inputs, targets) in enumerate(train_loader):
+            # TODO remove encoding step from transformer
+            # inputs = torch.unsqueeze(inputs, dim=1)
+            # inputs = torch.transpose(inputs, 0, 2)
+            optimizer.zero_grad()
+            output = model(inputs)
+            loss = criterion(output, targets)
+            loss.backward()
 
-    # history_loss = fit_model(train_x, train_y, test_x, test_y, model, epochs, batch_size)
+            optimizer.step()
 
+            train_loss += loss.item()
+
+            if batch_idx % 8 == 0:
+                print(f'loss after {batch_idx} batches: {train_loss}')
+                running_loss = 0
+
+        print(f'Loss for epoch {epoch}: {train_loss}')

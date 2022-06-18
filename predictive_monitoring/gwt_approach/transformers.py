@@ -138,6 +138,7 @@ class TransformerEncoder(nn.Module):
             #self.state_att = TransformerEncoderLayerVanilla(args=args)
             self.select_attention = SelectAttention( hidden_dim + hidden_dim, hidden_dim, num_read = 1, num_write = num_gru_schemas)
 
+        # TODO position encoder ?
         self.pe = PositionEncoder(args.encoder_embed_dim)
         self.pe_state = PositionEncoder(args.encoder_embed_dim)
 

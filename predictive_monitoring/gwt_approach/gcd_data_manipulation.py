@@ -1,3 +1,5 @@
+import torch
+import torchvision.transforms
 from pandas import DataFrame
 from pandas import concat
 from pandas import read_csv
@@ -125,6 +127,7 @@ class ClusterDataset(Dataset):
         reframed_final = extract_final_dataframe(reframed, [i for i in range(values.shape[1], (2 * values.shape[1]) - 1)])
         split_idx = math.floor(reframed_final.values.shape[0] * split_percentage)
         self.values = reframed_final.values[:split_idx, :] if training else reframed_final.values[split_idx:, :]
+        self.values = torch.from_numpy(self.values)
 
     def __len__(self):
         return self.values.shape[0]
