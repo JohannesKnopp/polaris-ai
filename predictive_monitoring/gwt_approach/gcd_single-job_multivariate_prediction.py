@@ -20,12 +20,12 @@ from transformers import TransformerEncoder
 
 
 class SharedWorkspaceModel(nn.Module):
-    def __init__(self, h_dim, output_shape):
+    def __init__(self):
         super().__init__()
         self.transformer = TransformerEncoder(
             # embed_dim=args.embed_dim, TODO
-            embed_dim=h_dim,
-            ffn_dim=ffn_dim,
+            embed_dim=args.h_dim,
+            ffn_dim=args.ffn_dim,
             num_layers=args.num_layers,
             num_heads=args.num_heads,
             dropout=args.dropout,
@@ -35,13 +35,14 @@ class SharedWorkspaceModel(nn.Module):
             topk=args.topk,
             mem_slots=args.mem_slots
         )
-        self.h_dim = h_dim
-        self.cls_token = nn.Parameter(torch.randn(1, 1, h_dim))
-        self.output = nn.Linear(ffn_dim, output_shape)
+
+        self.cls_token = nn.Parameter(torch.randn(1, 1, args.h_dim))
+        self.output = nn.Linear(args.h_dim, 1)  # TODO
 
     def forward(self, inputs):
-        print(inputs.shape)
+        # print(inputs.shape)
         x = inputs.cuda()
+        x = einops.repeat(x, 'b f -> b f h', h=args.h_dim)
 
         # x = einops.repeat(x, 'b f -> b (a f) d', a=16, d=self.h_dim)
         #
@@ -58,7 +59,7 @@ class SharedWorkspaceModel(nn.Module):
         #
         # print('SURVIVED THE TRANSFORMER :OOO')
 
-        x = self.output(x)
+        x = self.output(x[:, 0])
         return x
 
 
@@ -143,19 +144,21 @@ if __name__ == '__main__':
 
     results = defaultdict(list)
 
-    model = SharedWorkspaceModel(h_dim=args.h_dim, output_shape=1)  # TODO
-    model.to(device)
+    model = SharedWorkspaceModel()  # TODO
+    model.cuda()
 
-    criterion = nn.L1Loss()  # TODO try MSELoss()
+    criterion = nn.L1Loss().cuda()  # TODO try MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     # scheduler = torch.optim.lr_scheduler TODO add scheduler
 
-    for epoch in range(1, epochs):
+    for epoch in range(1, epochs + 1):
         print(f'\nEpoch: {epoch}')
         start_time = time.time()
         model.train()
         train_loss = 0
         for batch_idx, (inputs, targets) in enumerate(train_loader):
+            # print(f'batch_idx: {batch_idx}, input shape: {inputs.shape}, target shape: {targets.shape}')
+            inputs, targets = inputs.to(device), targets.to(device)
             # TODO remove encoding step from transformer
             # inputs = torch.unsqueeze(inputs, dim=1)
             # inputs = torch.transpose(inputs, 0, 2)
@@ -168,7 +171,7 @@ if __name__ == '__main__':
 
             train_loss += loss.item()
 
-            if batch_idx % 8 == 0:
+            if batch_idx % 50 == 0:
                 print(f'loss after {batch_idx} batches: {train_loss}')
                 running_loss = 0
 
