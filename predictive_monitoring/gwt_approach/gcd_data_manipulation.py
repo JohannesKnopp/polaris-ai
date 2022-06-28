@@ -99,18 +99,24 @@ def extract_train_test(values, n_train=(14 * 24 * 12)):
     return train_X, train_y, test_X, test_y, scaler
 
 
+def prepare_data(input_path, columns_to_consider, aggr_type='mean'):
+    readings_df = data_aggregation(load_data(input_path, columns_to_consider), aggr_type=aggr_type)
+    values = readings_df.astype('float32')
+    scaled, scaler = scale_values(values)
+    reframed = series_to_supervised(scaled, 1, 1)
+    reframed_final = extract_final_dataframe(reframed, [i for i in range(values.shape[1], (2 * values.shape[1]) - 1)])
+    print(type(reframed_final.values))
+    return reframed_final.values
+
+
 class ClusterDataset(Dataset):
     """
     PyTorch Custom Dataset to load the cluster data
 
     Attributes
     ----------
-    input_path : str
-        location of input file
-    columns_to_consider : list
-        fields relevant for the neural network
-    aggr_type : str
-        aggregation type for values (default = 'mean')
+    values : numpy.ndarray
+        the already prepared data (via prepare_data(input_path, columns_to_consider, aggr_type))
     training : bool
         indicates if the dataset is a training set or test set
         True = Training Set, False = Test Set
@@ -119,14 +125,9 @@ class ClusterDataset(Dataset):
         the given percentage is the proportion the training set
     """
     # TODO add constraints for aggr_type / split_percentage
-    def __init__(self, input_path, columns_to_consider, aggr_type='mean', training=True, split_percentage=0.7):
-        readings_df = data_aggregation(load_data(input_path, columns_to_consider), aggr_type=aggr_type)
-        values = readings_df.astype('float32')
-        scaled, scaler = scale_values(values)
-        reframed = series_to_supervised(scaled, 1, 1)
-        reframed_final = extract_final_dataframe(reframed, [i for i in range(values.shape[1], (2 * values.shape[1]) - 1)])
-        split_idx = math.floor(reframed_final.values.shape[0] * split_percentage)
-        self.values = reframed_final.values[:split_idx, :] if training else reframed_final.values[split_idx:, :]
+    def __init__(self, values, training=True, split_percentage=0.7):
+        split_idx = math.floor(values.shape[0] * split_percentage)
+        self.values = values[:split_idx, :] if training else values[split_idx:, :]
         self.values = torch.from_numpy(self.values)
 
     def __len__(self):
