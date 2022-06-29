@@ -3,67 +3,20 @@ import sys
 import json
 import time
 import math
+import os
 
-import einops
 import numpy as np
 from collections import defaultdict
+from matplotlib import pyplot
 
 from gcd_data_manipulation import ClusterDataset
 from gcd_data_manipulation import prepare_data
+from shared_workspace_module import SharedWorkspaceModule
 
 import torch
-import torchvision
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from transformers import TransformerEncoder
 from sklearn.metrics import mean_squared_error
-
-
-
-
-
-class SharedWorkspaceModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.transformer = TransformerEncoder(
-            # embed_dim=args.embed_dim, TODO
-            embed_dim=args.h_dim,
-            ffn_dim=args.ffn_dim,
-            num_layers=args.num_layers,
-            num_heads=args.num_heads,
-            dropout=args.dropout,
-            shared_memory_attention=args.shared_memory_attention,
-            share_parameters=args.share_vanilla_parameters,
-            use_topk=args.use_topk,
-            topk=args.topk,
-            mem_slots=args.mem_slots
-        )
-
-        self.cls_token = nn.Parameter(torch.randn(1, 1, args.h_dim))
-        self.output = nn.Linear(args.h_dim, 1)  # TODO
-
-    def forward(self, inputs):
-        # print(inputs.shape)
-        x = inputs.cuda()
-        x = einops.repeat(x, 'b f -> b f h', h=args.h_dim)
-
-        # x = einops.repeat(x, 'b f -> b (a f) d', a=16, d=self.h_dim)
-        #
-        # b, _, _ = x.shape
-        #
-        # cls_tokens = einops.repeat(self.cls_token, '() n d -> b n d', b=b)
-        # x = torch.cat((cls_tokens, x), dim=1)
-        #
-        # # x = einops.rearrange(x, 'b f -> b f f')
-        # print(x.shape)
-        #
-        # x = self.transformer(x)
-        # # x = self.mlp_head(x[:,0])
-        #
-        # print('SURVIVED THE TRANSFORMER :OOO')
-
-        x = self.output(x[:, 0])
-        return x
 
 
 def str2bool(v):
@@ -75,6 +28,15 @@ def str2bool(v):
     if v.lower() in ('no', 'false', 'f', 'n', '0'):
         return False
     raise argparse.ArgumentTypeError('Boolean value expected.')
+
+def plot_val_history(history, output_path, name):
+    # plot history
+    pyplot.clf()
+    pyplot.plot(history['avg_loss'], label='train')
+    pyplot.plot(history['avg_val_loss'], label='test')
+    pyplot.legend()
+    # pyplot.ylim((0.00, 0.27))
+    pyplot.savefig(os.path.join(output_path, 'gcd_%s_val-loss.png' % name))
 
 
 def rmse_percentage(outputs: torch.Tensor, targets: torch.Tensor):
@@ -150,19 +112,32 @@ if __name__ == '__main__':
 
     # results = defaultdict(list)  # TODO
 
-    model = SharedWorkspaceModel()  # TODO
+    model = SharedWorkspaceModule(
+        h_dim=args.h_dim,
+        ffn_dim=args.ffn_dim,
+        num_layers=args.num_layers,
+        num_heads=args.num_heads,
+        dropout=args.dropout,
+        shared_memory_attention=args.shared_memory_attention,
+        share_vanilla_parameters=args.share_vanilla_parameters,
+        use_topk=args.use_topk,
+        topk=args.topk,
+        mem_slots=args.mem_slots
+    )  # TODO
     model.cuda()
 
     criterion = nn.L1Loss(reduction='sum').cuda()  # TODO different loss function ?
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200) # relevant ?
     # scheduler = torch.optim.lr_scheduler TODO add scheduler
+    history_loss = defaultdict(list)
 
     for epoch in range(epochs):
         print(f'\nEpoch {epoch + 1} / {epochs}')
         start_time = time.time()
         model.train()
         total_loss = 0.
+        # train_predictions =
 
         # mini_batch_size = 10
         for batch_idx, (inputs, targets) in enumerate(train_loader):
@@ -190,6 +165,7 @@ if __name__ == '__main__':
             #     current_loss = 0.
 
         average_loss = total_loss / len(train_data)
+        history_loss['avg_loss'].append(average_loss)
 
         print(f'Average Training Loss: {average_loss: .5f}')
 
@@ -204,4 +180,21 @@ if __name__ == '__main__':
 
             validation_loss += loss.item()
 
-        print(f'Validation loss: {validation_loss / len(val_data): .5f}')
+        average_validation_loss = validation_loss / len(val_data)
+        history_loss['avg_val_loss'].append(average_validation_loss)
+        print(f'Validation loss: {average_validation_loss: .5f}')
+
+    plot_val_history(history_loss, figures_path, exp_name)
+
+    # TODO add RMSE / RMSE% / EPOCH_NUM / ? ... to state_dict()
+    # TODO better naming of model save
+    # torch.save(model.state_dict(), f'../models/gwt_models/gwt_model_{exp_name}.pth')
+
+    model_state_dict = {
+        'state_dict': model.state_dict(),
+        'model_args': args,
+        'epoch': epochs,
+        'loss': history_loss['avg_loss'][-1]
+    }
+
+    torch.save(model_state_dict, f'../models/gwt_models/gwt_model_{exp_name}.pth')
