@@ -33,7 +33,7 @@ def plot_val_history(history, output_path, name):
     # plot history
     pyplot.clf()
     pyplot.plot(history['avg_loss'], label='train')
-    pyplot.plot(history['avg_val_loss'], label='test')
+    pyplot.plot(history['avg_val_loss'], label='validation')
     pyplot.legend()
     # pyplot.ylim((0.00, 0.27))
     pyplot.savefig(os.path.join(output_path, 'gcd_%s_val-loss.png' % name))
@@ -41,6 +41,91 @@ def plot_val_history(history, output_path, name):
 
 def rmse_percentage(outputs: torch.Tensor, targets: torch.Tensor):
     return math.sqrt(mean_squared_error(targets, outputs)) / targets.mean()
+
+
+def train_one_epoch():
+    #start_time = time.time()
+    model.train()
+    total_loss = 0.
+    # train_predictions =
+
+    # mini_batch_size = 10
+    for batch_idx, (inputs, targets) in enumerate(train_loader):
+        # reshape target to torch.Size([batch_size, 1]) to match the output of the model
+        # move tensors to cuda
+        inputs, targets = inputs.to(device), targets.to(device)
+
+        # zero the gradients
+        optimizer.zero_grad()
+        # forward pass
+        outputs = model(inputs)
+        # TODO pre_loss_fn ?
+        # compute loss
+        # loss = criterion(outputs, targets)
+
+        # print(outputs.shape, targets.shape)
+
+        # loss_list = list()
+        #
+        # for i in range(num_targets):
+        #     loss_list.append(criterion(outputs[:, i], targets[:, i]))
+
+
+        # back propagation
+        # loss = sum(loss_list)
+        loss = criterion(outputs, targets)
+        print(outputs, targets)
+
+        loss.backward()
+        # gradient descent
+        optimizer.step()
+
+        total_loss += loss.item()
+        # if batch_idx % mini_batch_size == 9:
+        #     last_loss = current_loss / mini_batch_size
+        #     print(f'Loss after mini-batch {batch_idx + 1 : 3d}: {last_loss : .5f}')
+        #     current_loss = 0.
+        # exit(0)
+
+    average_loss = total_loss / len(train_data)
+    history_loss['avg_loss'].append(average_loss)
+
+    print(f'Average Training Loss: {average_loss: .5f}')
+
+
+def validate_one_epoch():
+    model.eval()
+
+    validation_loss = 0.
+    for batch_idx, (inputs, targets) in enumerate(val_loader):
+        # targets = targets.reshape((targets.shape[0], 1))
+        inputs, targets = inputs.to(device), targets.to(device)
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+
+        validation_loss += loss.item()
+
+    average_validation_loss = validation_loss / len(val_data)
+    history_loss['avg_val_loss'].append(average_validation_loss)
+    print(f'Validation loss: {average_validation_loss: .5f}')
+
+
+# def hyperparameter_tuning(config, checkpoint_dir=None):
+#     model = SharedWorkspaceModule(
+#         h_dim=config['h_dim'],
+#         ffn_dim=config['ffn_dim'],
+#         num_layers=config['num_layers'],
+#         num_heads=config['num_heads'],
+#         dropout=config['dropout'],
+#         shared_memory_attention=config['shared_memory_attention'],
+#         share_vanilla_parameters=config['share_vanilla_parameters'],
+#         use_topk=config['use_topk'],
+#         topk=config['topk'],
+#         mem_slots=config['mem_slots'],
+#         num_targets=config['num_targets']
+#     ).cuda()
+#
+#     criterion = torch.utils.
 
 
 if __name__ == '__main__':
@@ -52,7 +137,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', default=64, type=int, help='batch_size to use')
     parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
 
-    parser.add_argument('--h_dim', type=int, default=64) # this is shape of the input data TODO doublecheck
+    parser.add_argument('--h_dim', type=int, default=64)  # this is shape of the input data TODO doublecheck
     parser.add_argument('--num_layers', default=12, type=int, help='num of layers')
     parser.add_argument('--num_heads', default=4, type=int, help='num of heads in Multi Head attention layer')
     parser.add_argument('--dropout', default=0.1, type=float, help='dropout')
@@ -63,6 +148,10 @@ if __name__ == '__main__':
     parser.add_argument('--mem_slots', type=int, default=4)
     # TODO currently omitted null_attention and num_steps -> not necessary afaik
 
+    parser.add_argument('--prediction_targets', type=int, nargs='+', default=[0])
+    parser.add_argument('--sliding_window', type=int, default=1)
+
+    parser.add_argument('--columns_to_consider', type=str, default='GWT_efficiency_1')
     parser.add_argument('--exp_name', type=str, required=True, help='Name of the experiment. Necessary to save results')
 
     print(torch.cuda.get_device_name(torch.cuda.current_device()))
@@ -88,6 +177,7 @@ if __name__ == '__main__':
     batch_size = args.batch_size
     exp_name = args.exp_name
     JOB_ID = args.job_id
+    num_targets = len(args.prediction_targets)
 
     input_path = f'../data/task-usage_job-ID-{JOB_ID}_total.csv'
     figures_path = '../experiments_result/figures_GWT'
@@ -95,14 +185,15 @@ if __name__ == '__main__':
     model_path = '../models'
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    columns_to_consider = columns_selection['GWT_efficiency_1']  # TODO add argparse
+    columns_to_consider = columns_selection[args.columns_to_consider]  # TODO add argparse
 
     # transform = torchvision.transforms.ToTensor()
 
-    data = prepare_data(input_path, columns_to_consider, aggr_type='mean')
+    data = prepare_data(input_path, columns_to_consider, targets=args.prediction_targets,
+                        sliding_window=args.sliding_window, aggr_type='mean')
 
-    train_data = ClusterDataset(data, training=True, split_percentage=0.7)
-    val_data = ClusterDataset(data, training=False, split_percentage=0.7)
+    train_data = ClusterDataset(data, num_targets=num_targets, training=True, split_percentage=0.7)
+    val_data = ClusterDataset(data, num_targets=num_targets, training=False, split_percentage=0.7)
 
     train_data.values.to(device)
     val_data.values.to(device)
@@ -122,67 +213,21 @@ if __name__ == '__main__':
         share_vanilla_parameters=args.share_vanilla_parameters,
         use_topk=args.use_topk,
         topk=args.topk,
-        mem_slots=args.mem_slots
+        mem_slots=args.mem_slots,
+        num_targets=num_targets
     )  # TODO
     model.cuda()
 
     criterion = nn.L1Loss(reduction='sum').cuda()  # TODO different loss function ?
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200) # relevant ?
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)  # relevant ?
     # scheduler = torch.optim.lr_scheduler TODO add scheduler
     history_loss = defaultdict(list)
 
     for epoch in range(epochs):
         print(f'\nEpoch {epoch + 1} / {epochs}')
-        start_time = time.time()
-        model.train()
-        total_loss = 0.
-        # train_predictions =
-
-        # mini_batch_size = 10
-        for batch_idx, (inputs, targets) in enumerate(train_loader):
-            # reshape target to torch.Size([batch_size, 1]) to match the output of the model
-            targets = targets.reshape((targets.shape[0], 1))
-            # move tensors to cuda
-            inputs, targets = inputs.to(device), targets.to(device)
-
-            # zero the gradients
-            optimizer.zero_grad()
-            # forward pass
-            outputs = model(inputs)
-            # TODO pre_loss_fn ?
-            # compute loss
-            loss = criterion(outputs, targets)  # TODO double check squeeze is ok
-            # back propagation
-            loss.backward()
-            # gradient descent
-            optimizer.step()
-
-            total_loss += loss.item()
-            # if batch_idx % mini_batch_size == 9:
-            #     last_loss = current_loss / mini_batch_size
-            #     print(f'Loss after mini-batch {batch_idx + 1 : 3d}: {last_loss : .5f}')
-            #     current_loss = 0.
-
-        average_loss = total_loss / len(train_data)
-        history_loss['avg_loss'].append(average_loss)
-
-        print(f'Average Training Loss: {average_loss: .5f}')
-
-        model.eval()
-
-        validation_loss = 0.
-        for batch_idx, (inputs, targets) in enumerate(val_loader):
-            targets = targets.reshape((targets.shape[0], 1))
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-
-            validation_loss += loss.item()
-
-        average_validation_loss = validation_loss / len(val_data)
-        history_loss['avg_val_loss'].append(average_validation_loss)
-        print(f'Validation loss: {average_validation_loss: .5f}')
+        train_one_epoch()
+        validate_one_epoch()
 
     plot_val_history(history_loss, figures_path, exp_name)
 
