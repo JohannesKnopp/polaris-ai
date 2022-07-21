@@ -1,4 +1,4 @@
-import gcd_single_job_multivariate_prediction
+# import gcd_single_job_multivariate_prediction
 from shared_workspace_module import SharedWorkspaceModule
 from gcd_data_manipulation import ClusterDataset
 from gcd_data_manipulation import prepare_data
@@ -12,7 +12,7 @@ import numpy as np
 
 from ray import tune
 from ray.tune import CLIReporter
-from ray.tune import ASHAScheduler
+from ray.tune.schedulers import ASHAScheduler
 from functools import partial
 
 
@@ -100,14 +100,14 @@ if __name__ == '__main__':
     config = {
         'h_dim': tune.sample_from(lambda _: 2**np.random.randint(3, 7)),
         'ffn_dim': tune.sample_from(lambda _: 2**np.random.randint(3, 9)),
-        'num_layers': tune.sample_from(lambda _: np.random.randint(3, 20)),
-        'num_heads': tune.sample_from(lambda _: np.random.randint(3, 8)),
+        'num_layers': tune.sample_from(lambda _: np.random.randint(3, 17)),
+        'num_heads': tune.sample_from(lambda _: 2**np.random.randint(1, 4)),
         'dropout': 0,
         'shared_memory_attention': True,
         'share_vanilla_parameters': True,
         'use_topk': True,
-        'topk': tune.sample_from(lambda _: np.random.randint(3, 8)),
-        'mem_slots': tune.sample_from(lambda _: np.random.randint(config['topk'], 10)),
+        'topk': tune.sample_from(lambda _: np.random.randint(3, 6)),
+        'mem_slots': 6, # tune.sample_from(lambda _: np.random.randint(config['topk'], 10)),
         'num_targets': 1,
         'batch_size': tune.sample_from(lambda _: 8*np.random.randint(2, 16)), # values between 16 and 120 in increments of 8
         'lr': tune.loguniform(1e-4, 1e-1)
