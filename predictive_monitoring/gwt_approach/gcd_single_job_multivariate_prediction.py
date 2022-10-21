@@ -12,12 +12,15 @@ from matplotlib import pyplot
 from gcd_data_manipulation import ClusterDataset
 from gcd_data_manipulation import prepare_data
 from shared_workspace_module import SharedWorkspaceModule
+from autoencoder import Autoencoder
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from sklearn.metrics import mean_squared_error
+# from sklearn.metrics import mean_squared_error
+# from torchmetrics import MeanSquaredError
 
+USE_AE = False
 
 def str2bool(v):
     """Method to map string to bool for argument parser"""
@@ -39,9 +42,27 @@ def plot_val_history(history, output_path, name):
     pyplot.savefig(os.path.join(output_path, 'gcd_%s_val-loss.png' % name))
 
 
-def rmse_percentage(outputs: torch.Tensor, targets: torch.Tensor):
-    return math.sqrt(mean_squared_error(targets, outputs)) / targets.mean()
+def rmse(yhat, y):
+    # yhat = outputs.numpy()
+    # y = targets.numpy()
+    return torch.sqrt(torch.mean(torch.square(y - yhat)))
 
+
+def rmspe(yhat, y):
+    return rmse(yhat, y) / torch.mean(y)
+
+def rmsse(yhat, y):
+    e = y - yhat
+    m = 1 / (len(y) - 1)
+    s = (y - torch.roll(y, 1))[1:]
+    t = torch.sum(abs(s))
+    #print(t, m, e)
+    return torch.sqrt(torch.mean((e / (m * t))**2))
+
+def lag(y):
+    yhat = torch.roll(y, 1)[1:]
+    y = y[1:]
+    return rmse(yhat, y)
 
 def train_one_epoch():
     #start_time = time.time()
@@ -49,6 +70,7 @@ def train_one_epoch():
     total_loss = 0.
     # train_predictions =
 
+    # optimizer.zero_grad()
     # mini_batch_size = 10
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         # reshape target to torch.Size([batch_size, 1]) to match the output of the model
@@ -58,6 +80,10 @@ def train_one_epoch():
         # zero the gradients
         optimizer.zero_grad()
         # forward pass
+
+        if USE_AE:
+            inputs = autoencoder(inputs)
+
         outputs = model(inputs)
         # TODO pre_loss_fn ?
         # compute loss
@@ -74,7 +100,7 @@ def train_one_epoch():
         # back propagation
         # loss = sum(loss_list)
         loss = criterion(outputs, targets)
-        print(outputs, targets)
+        # print(outputs, targets)
 
         loss.backward()
         # gradient descent
@@ -97,17 +123,34 @@ def validate_one_epoch():
     model.eval()
 
     validation_loss = 0.
+
+    full_pred = torch.Tensor().to(device)
+    full_target = torch.Tensor().to(device)
+
+
     for batch_idx, (inputs, targets) in enumerate(val_loader):
         # targets = targets.reshape((targets.shape[0], 1))
         inputs, targets = inputs.to(device), targets.to(device)
+        if USE_AE:
+            inputs = autoencoder(inputs)
         outputs = model(inputs)
         loss = criterion(outputs, targets)
+
+        full_pred = torch.cat((full_pred, outputs))
+        full_target = torch.cat((full_target, targets))
 
         validation_loss += loss.item()
 
     average_validation_loss = validation_loss / len(val_data)
     history_loss['avg_val_loss'].append(average_validation_loss)
     print(f'Validation loss: {average_validation_loss: .5f}')
+    print(f'Validation RMSE: {rmse(full_pred, full_target)}')
+    print(f'Validation RMSPE: {rmspe(full_pred, full_target)}')
+    print(f'Validation RMSSE: {rmsse(full_pred, full_target)}')
+    print(f'lag: {lag(full_target)}')
+
+    # print(f'{full_pred =}')
+    # print(f'{full_target =}')
 
 
 # def hyperparameter_tuning(config, checkpoint_dir=None):
@@ -217,6 +260,9 @@ if __name__ == '__main__':
         num_targets=num_targets
     )  # TODO
     model.cuda()
+
+    autoencoder = Autoencoder()
+    autoencoder.cuda()
 
     criterion = nn.L1Loss(reduction='sum').cuda()  # TODO different loss function ?
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)

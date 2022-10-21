@@ -35,7 +35,9 @@ class SharedWorkspaceModule(nn.Module):
     def forward(self, inputs):
         # print(inputs.shape)
         x = inputs.cuda()
+        # print(x.shape)
         x = einops.repeat(x, 'b f -> b f h', h=self.h_dim)
+        # print(x.shape)
 
         # TODO maybe only makes sense for sliding window
         # cls_tokens = einops.repeat(self.cls_token, '() n d -> b n d', b=x.shape[0])

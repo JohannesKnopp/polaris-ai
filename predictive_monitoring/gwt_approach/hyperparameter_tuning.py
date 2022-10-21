@@ -42,7 +42,7 @@ def train_gcd(config, checkpoint_dir=None):
     with open('columns_selection.json') as f:
         columns_to_consider = json.load(f)['GWT_efficiency_1']
 
-    data = prepare_data('../data/task-usage_job-ID-3418339_total.csv', columns_to_consider, targets=[0], sliding_window=1)
+    data = prepare_data('../data/task-usage_job-ID-3418339_total.csv', columns_to_consider, targets=[0, 1, 2], sliding_window=12)
 
     train_data = ClusterDataset(data, num_targets=1, training=True, split_percentage=0.7)
     val_data = ClusterDataset(data, num_targets=1, training=False, split_percentage=0.7)
@@ -95,7 +95,7 @@ def train_gcd(config, checkpoint_dir=None):
 
 
 if __name__ == '__main__':
-    MAX_NUM_EPOCHS = 100
+    MAX_NUM_EPOCHS = 50
 
     config = {
         'h_dim': tune.sample_from(lambda _: 2**np.random.randint(3, 7)),
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     result = tune.run(
         partial(train_gcd, checkpoint_dir='tuning_checkpoint'),
         config=config,
-        num_samples=1000,
+        num_samples=100,
         scheduler=scheduler,
         progress_reporter=reporter,
         checkpoint_at_end=True
