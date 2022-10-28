@@ -213,6 +213,8 @@ class RelationalMemory(nn.Module):
         else:
             init_state = torch.randn(batch_size, self.mem_slots, self.mem_size)
             return init_state
+
+
     def multihead_attention(self, input, memory, use_topk_ = True, store_log = True):
         """
         Perform multi-head attention from 'Attention is All You Need'.
@@ -223,10 +225,10 @@ class RelationalMemory(nn.Module):
         Returns:
           new_memory: New memory tensor.
         """
-
-        q = self.query_proj(memory)
-        k = self.key_proj(input)
-        v = self.value_proj(input)
+        #HERECHANGED
+        q = self.query_proj(memory).cuda()
+        k = self.key_proj(input).cuda()
+        v = self.value_proj(input).cuda()
 
         q = q.reshape(q.size(0), q.size(1), self.num_heads, -1).permute(0, 2, 1, 3)
         k = k.reshape(k.size(0), k.size(1), self.num_heads, -1).permute(0, 2, 1, 3)

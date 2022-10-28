@@ -580,7 +580,7 @@ class MultiheadAttention(nn.Module):
 
             _,_, self.memory, out_hx_mem_new = self.relational_memory(
                  inputs=key,
-                 memory=self.memory#.cuda(),
+                 memory=self.memory.cuda(),
              )
             #print('time taken by relational:' + str(time.time() - t2))
 

@@ -172,6 +172,8 @@ class RelationalMemory(nn.Module):
         Returns:
           new_memory: New memory tensor.
         """
+        memory = memory.cuda()
+        input = input.cuda()
 
         q = self.query_proj(memory)
         k = self.key_proj(input)

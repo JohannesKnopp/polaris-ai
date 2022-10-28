@@ -1,0 +1,2 @@
+,experiment,units,batch_size,epochs,rmse,rmspe,rmsse
+0,exp_rim_new,64,32,200,0.18435967,0.7212975,21.487549

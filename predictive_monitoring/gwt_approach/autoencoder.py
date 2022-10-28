@@ -9,11 +9,11 @@ class Autoencoder(nn.Module):
         # layer followed by Relu activation function
         # 784 ==> 9
         self.encoder = nn.Sequential(
-            nn.Linear(192, 96),
+            nn.Linear(48, 36),
             nn.ReLU(),
-            nn.Linear(96, 48),
-            nn.ReLU(),
-            nn.Linear(48, 24),
+            nn.Linear(36, 24),
+            # nn.ReLU(),
+            # nn.Linear(24, 24),
             nn.ReLU(),
             nn.Linear(24, 16)
         )

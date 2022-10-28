@@ -19,12 +19,32 @@ from tfRIM import RIMCell
 from sklearn.metrics import mean_squared_error
 from matplotlib import pyplot
 
+
+def rmse(yhat, y):
+    # print(type(yhat), type(y))
+    return np.sqrt(np.mean((y - yhat)**2))
+
+
+def rmspe(yhat, y):
+    # EPSILON = 1e-10
+    # print(((y - yhat) / (y + EPSILON))**2)
+    return rmse(yhat, y) / np.mean(y)
+
+
+def rmsse(yhat, y):
+    e_2 = (y - yhat)
+    m = 1 / (len(y) - 1)
+    t = np.sum(abs(np.delete((y - np.roll(y, 1)), 0)))
+    return np.sqrt(np.mean((e_2 / (m * t))**2))
+
+
 def generate_model(train_x, batch_size, units):
     rim_cell = RIMCell(units=units, nRIM=6, k=4,
                        num_input_heads=4, input_key_size=32, input_value_size=32, input_query_size=32, input_keep_prob=1,
                        num_comm_heads=4, comm_key_size=32, comm_value_size=32, comm_query_size=32, comm_keep_prob=1)
 
     model = Sequential()
+    # print(train_x.shape)
     model.add(RNN(cell=rim_cell, batch_input_shape=(batch_size, train_x.shape[1], train_x.shape[2])))
     model.add(Dense(1))
     model.compile(loss='mae', optimizer='adam')
@@ -37,6 +57,11 @@ def fit_model(train_x, train_y, test_x, test_y, model, epochs, batch_size):
 
 
 def predict_model(test_x, test_y, model):
+    yhat = model.predict(test_x, batch_size=batch_size)
+    return test_y, yhat
+
+
+def predict_model_old(test_x, test_y, model):
     yhat = model.predict(test_x, batch_size=batch_size)
     test_x = test_x.reshape(test_x.shape[0], test_x.shape[2])
     inv_yhat = np.concatenate((test_x[:, :-1], yhat), axis=1)
@@ -109,7 +134,6 @@ if __name__ == '__main__':
 
     results = defaultdict(list)
 
-    # TODO add repetition parameter
     train_x, train_y, test_x, test_y, scaler = extract_train_test(readings_df.values)
 
     model = generate_model(train_x, batch_size, neurons)
@@ -118,15 +142,29 @@ if __name__ == '__main__':
 
     inv_y, inv_yhat = predict_model(test_x, test_y, model)
 
-    rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
+    # rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
     # rmspe =
-    print('RMSE: %.3f' % rmse)
+    # print('RMSE: %.3f' % rmse)
+
+    rmse_val = rmse(inv_yhat, inv_y)
+    rmspe_val = rmspe(inv_yhat, inv_y)
+    rmsse_val = rmsse(inv_yhat, inv_y)
+
+    print(f'{rmse_val =}')
+    print(f'{rmspe_val =}')
+    print(f'{rmsse_val =}')
+
+
 
     results['experiment'].append(exp_name)
     results['units'].append(neurons)
     results['batch_size'].append(batch_size)
     results['epochs'].append(epochs)
-    results['rmse'].append(rmse)
+    results['rmse'].append(rmse_val)
+    results['rmspe'].append(rmspe_val)
+    results['rmsse'].append(rmsse_val)
+
+
 
     res = pd.DataFrame(results)
     res.to_csv(os.path.join(results_path, '%s.csv' % exp_name))

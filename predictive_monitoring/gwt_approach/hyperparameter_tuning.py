@@ -42,7 +42,7 @@ def train_gcd(config, checkpoint_dir=None):
     with open('columns_selection.json') as f:
         columns_to_consider = json.load(f)['GWT_efficiency_1']
 
-    data = prepare_data('../data/task-usage_job-ID-3418339_total.csv', columns_to_consider, targets=[0, 1, 2], sliding_window=12)
+    data = prepare_data('../data/task-usage_job-ID-3418339_total.csv', columns_to_consider, targets=[0], sliding_window=1)
 
     train_data = ClusterDataset(data, num_targets=1, training=True, split_percentage=0.7)
     val_data = ClusterDataset(data, num_targets=1, training=False, split_percentage=0.7)
@@ -57,8 +57,8 @@ def train_gcd(config, checkpoint_dir=None):
 
     criterion = nn.L1Loss(reduction='sum').cuda()
 
-    for epoch in range(100):
-        print(f'Epoch {epoch}/100:')
+    for epoch in range(40):
+        print(f'Epoch {epoch}/40:')
         model.train()
         total_loss = 0.
 
@@ -98,20 +98,22 @@ if __name__ == '__main__':
     MAX_NUM_EPOCHS = 50
 
     config = {
-        'h_dim': tune.sample_from(lambda _: 2**np.random.randint(3, 7)),
-        'ffn_dim': tune.sample_from(lambda _: 2**np.random.randint(3, 9)),
+        'h_dim': tune.sample_from(lambda _: 2**np.random.randint(3, 8)),
+        'ffn_dim': tune.sample_from(lambda _: 2**np.random.randint(3, 10)),
         'num_layers': tune.sample_from(lambda _: np.random.randint(3, 17)),
         'num_heads': tune.sample_from(lambda _: 2**np.random.randint(1, 4)),
         'dropout': 0,
         'shared_memory_attention': True,
         'share_vanilla_parameters': True,
         'use_topk': True,
-        'topk': tune.sample_from(lambda _: np.random.randint(3, 6)),
-        'mem_slots': 6, # tune.sample_from(lambda _: np.random.randint(config['topk'], 10)),
+        'topk': tune.sample_from(lambda _: np.random.randint(3, 7)),
+        'mem_slots': 8,  # tune.sample_from(lambda _: np.random.randint(config['topk'], 10)),
         'num_targets': 1,
         'batch_size': tune.sample_from(lambda _: 8*np.random.randint(2, 16)), # values between 16 and 120 in increments of 8
         'lr': tune.loguniform(1e-4, 1e-1)
     }
+
+
 
     scheduler = ASHAScheduler(
         metric='loss',
@@ -130,8 +132,8 @@ if __name__ == '__main__':
         config=config,
         num_samples=100,
         scheduler=scheduler,
-        progress_reporter=reporter,
-        checkpoint_at_end=True
+        progress_reporter=reporter
+        # checkpoint_at_end=True
     )
 
     best_trial = result.get_best_trial("loss", "min", "last")

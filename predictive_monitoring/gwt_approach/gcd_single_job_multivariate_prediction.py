@@ -47,7 +47,6 @@ def rmse(yhat, y):
     # y = targets.numpy()
     return torch.sqrt(torch.mean(torch.square(y - yhat)))
 
-
 def rmspe(yhat, y):
     return rmse(yhat, y) / torch.mean(y)
 
@@ -63,6 +62,15 @@ def lag(y):
     yhat = torch.roll(y, 1)[1:]
     y = y[1:]
     return rmse(yhat, y)
+
+
+def msse_loss(prediction, target):
+    e = target - prediction
+    m = 1 / (len(target) - 1)
+    s = (target - torch.roll(target, 1))[1:]
+    t = torch.sum(abs(s))
+    return torch.mean(torch.sum((e / (m * t))**2))
+
 
 def train_one_epoch():
     #start_time = time.time()
@@ -100,6 +108,7 @@ def train_one_epoch():
         # back propagation
         # loss = sum(loss_list)
         loss = criterion(outputs, targets)
+        # print(outputs.shape, targets.shape)
         # print(outputs, targets)
 
         loss.backward()
@@ -148,6 +157,7 @@ def validate_one_epoch():
     print(f'Validation RMSPE: {rmspe(full_pred, full_target)}')
     print(f'Validation RMSSE: {rmsse(full_pred, full_target)}')
     print(f'lag: {lag(full_target)}')
+    print(f'lag rmspe: {lag(full_target) / torch.mean(full_target)}')
 
     # print(f'{full_pred =}')
     # print(f'{full_target =}')
@@ -264,7 +274,8 @@ if __name__ == '__main__':
     autoencoder = Autoencoder()
     autoencoder.cuda()
 
-    criterion = nn.L1Loss(reduction='sum').cuda()  # TODO different loss function ?
+    criterion = nn.L1Loss().cuda()  # TODO different loss function ?
+    # criterion = msse_loss
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)  # relevant ?
     # scheduler = torch.optim.lr_scheduler TODO add scheduler
